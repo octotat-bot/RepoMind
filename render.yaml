@@ -69,11 +69,11 @@ services:
         value: BAAI/bge-small-en-v1.5
       - key: EMBEDDING_DIMENSION
         value: "384"
-      # Measured on a 512 MB instance: batch 16 with default ONNX threads
-      # peaks at 458 MB and gets the process killed mid-index. Batch 4 on a
-      # single thread peaks at 348 MB.
+      # Peak memory embedding 446 real chunks (~560 tokens each) on one
+      # thread: batch 4 reaches 457 MB and is killed part-way through;
+      # batch 1 reaches 349 MB and completes. Slower, but it finishes.
       - key: EMBEDDING_BATCH_SIZE
-        value: "4"
+        value: "1"
       - key: EMBEDDING_THREADS
         value: "1"
       - key: MODEL_CACHE_DIR

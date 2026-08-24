@@ -158,7 +158,7 @@ pip install -r requirements.txt && python -c "from fastembed import TextEmbeddin
 | `EMBEDDING_PROVIDER` | `fastembed` |
 | `FASTEMBED_MODEL` | `BAAI/bge-small-en-v1.5` |
 | `EMBEDDING_DIMENSION` | `384` |
-| `EMBEDDING_BATCH_SIZE` | `4` |
+| `EMBEDDING_BATCH_SIZE` | `1` |
 | `EMBEDDING_THREADS` | `1` |
 | `MODEL_CACHE_DIR` | `../data/models` |
 | `MAX_CONCURRENT_INDEXING_JOBS` | `1` |
@@ -300,10 +300,17 @@ Almost always a Python version mismatch. Set `PYTHON_VERSION` to `3.13.0`.
 The instance ran out of memory and was killed. Peak usage measured on the
 free tier while indexing a 446-chunk repository:
 
+Measured embedding 446 chunks of roughly 560 tokens each, which is what a
+real repository produces:
+
 | Configuration | Peak | Fits in 512 MB? |
 | --- | --- | --- |
-| batch 16, default ONNX threads | 458 MB | no — killed mid-index |
-| batch 4, `EMBEDDING_THREADS=1` | 348 MB | yes |
+| batch 16, default ONNX threads | 458 MB | no — killed early |
+| batch 4, one thread | 457 MB | no — killed around 85% |
+| **batch 1, one thread** | **349 MB** | **yes** |
+
+Chunk length matters as much as batch size: the same settings measured
+against short strings suggested batch 4 was fine, and it was not.
 
 The floor is about 320 MB, most of it the ONNX runtime and the model itself, so
 there is not much more to reclaim. Check `EMBEDDING_BATCH_SIZE=4`,
