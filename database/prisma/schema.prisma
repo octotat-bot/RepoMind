@@ -1,0 +1,245 @@
+// RepoMind data model.
+//
+// This schema is the canonical definition of the database and owns migrations
+// for Postgres deployments. The FastAPI backend maps the same tables with
+// SQLAlchemy (see backend/database/models/); column names, types and enum
+// values are identical on both sides, so either layer can read and write the
+// same rows.
+//
+//   npx prisma migrate dev --name init     # create/apply a migration
+//   npx prisma studio                      # browse the data
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+/// Lifecycle of a repository's vector index, ordered by pipeline progress.
+enum IndexStatus {
+  QUEUED
+  CLONING
+  PARSING
+  CHUNKING
+  EMBEDDING
+  INDEXING
+  READY
+  FAILED
+
+  @@map("index_status")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+
+  @@map("message_role")
+}
+
+// ─── Models ───────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid()) @db.VarChar(32)
+  email        String   @unique @db.VarChar(255)
+  name         String   @db.VarChar(120)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  avatarUrl    String?  @map("avatar_url") @db.VarChar(512)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  repositories Repository[]
+  chats        Chat[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model Repository {
+  id     String @id @default(uuid()) @db.VarChar(32)
+  userId String @map("user_id") @db.VarChar(32)
+
+  // GitHub identity
+  url           String  @db.VarChar(512)
+  owner         String  @db.VarChar(120)
+  name          String  @db.VarChar(200)
+  fullName      String  @map("full_name") @db.VarChar(320)
+  description   String?
+  defaultBranch String  @default("main") @map("default_branch") @db.VarChar(120)
+  language      String? @db.VarChar(60)
+  stars         Int     @default(0)
+  forks         Int     @default(0)
+
+  // Indexing state
+  status        IndexStatus @default(QUEUED)
+  progress      Int         @default(0)
+  statusMessage String?     @map("status_message") @db.VarChar(255)
+  errorMessage  String?     @map("error_message")
+
+  // Statistics
+  fileCount  Int       @default(0) @map("file_count")
+  chunkCount Int       @default(0) @map("chunk_count")
+  totalBytes BigInt    @default(0) @map("total_bytes")
+  lineCount  Int       @default(0) @map("line_count")
+  indexedAt  DateTime? @map("indexed_at") @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files       RepositoryFile[]
+  chunks      CodeChunk[]
+  chats       Chat[]
+  indexRecord IndexRecord?
+
+  // One import per repository per user.
+  @@unique([userId, fullName], map: "uq_repository_owner_name")
+  @@index([userId])
+  @@index([fullName])
+  @@index([status])
+  @@map("repositories")
+}
+
+/// An ingested source file.
+///
+/// `content` is normally null because the clone on disk is the source of truth.
+/// It is populated only when the host has an ephemeral filesystem, so the
+/// working tree can be rebuilt after a restart wipes the disk.
+model RepositoryFile {
+  id           String @id @default(uuid()) @db.VarChar(32)
+  repositoryId String @map("repository_id") @db.VarChar(32)
+
+  path       String  @db.VarChar(1024)
+  name       String  @db.VarChar(255)
+  extension  String  @default("") @db.VarChar(32)
+  language   String  @default("text") @db.VarChar(60)
+  sizeBytes  Int     @default(0) @map("size_bytes")
+  lineCount  Int     @default(0) @map("line_count")
+  chunkCount Int     @default(0) @map("chunk_count")
+  content    String?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  repository Repository  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  chunks     CodeChunk[]
+
+  @@unique([repositoryId, path], map: "ix_repository_files_repo_path")
+  @@index([repositoryId])
+  @@index([language])
+  @@map("repository_files")
+}
+
+/// A retrievable slice of a file.
+///
+/// `vectorId` is the row offset of this chunk's embedding inside the
+/// repository's FAISS index — the link that turns a similarity hit back into
+/// a citation with real line numbers.
+///
+/// `embedding` stores that vector as raw float32 bytes, which makes the FAISS
+/// index a derived artefact: it can be rebuilt in milliseconds after a restart
+/// wipes the disk, with no re-embedding and no calls to the model.
+model CodeChunk {
+  id           String @id @default(uuid()) @db.VarChar(32)
+  repositoryId String @map("repository_id") @db.VarChar(32)
+  fileId       String @map("file_id") @db.VarChar(32)
+
+  vectorId   Int     @map("vector_id")
+  chunkIndex Int     @default(0) @map("chunk_index")
+  content    String
+  filePath   String  @map("file_path") @db.VarChar(1024)
+  language   String  @default("text") @db.VarChar(60)
+  startLine  Int     @default(1) @map("start_line")
+  endLine    Int     @default(1) @map("end_line")
+  tokenCount Int     @default(0) @map("token_count")
+  symbols    String?
+  embedding  Bytes?
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  repository Repository     @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  file       RepositoryFile @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([repositoryId, vectorId], map: "ix_code_chunks_repo_vector")
+  @@index([repositoryId])
+  @@index([fileId])
+  @@map("code_chunks")
+}
+
+/// Bookkeeping for the on-disk FAISS index backing one repository.
+model IndexRecord {
+  id           String @id @default(uuid()) @db.VarChar(32)
+  repositoryId String @unique @map("repository_id") @db.VarChar(32)
+
+  provider        String @default("faiss") @db.VarChar(60)
+  embeddingModel  String @map("embedding_model") @db.VarChar(120)
+  dimension       Int
+  metric          String @default("cosine") @db.VarChar(32)
+  vectorCount     Int    @default(0) @map("vector_count")
+  indexPath       String @map("index_path") @db.VarChar(1024)
+  sizeBytes       BigInt @default(0) @map("size_bytes")
+  buildDurationMs Int    @default(0) @map("build_duration_ms")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@map("indexes")
+}
+
+/// A conversation. Each repository has its own independent history.
+model Chat {
+  id           String @id @default(uuid()) @db.VarChar(32)
+  repositoryId String @map("repository_id") @db.VarChar(32)
+  userId       String @map("user_id") @db.VarChar(32)
+
+  title        String @default("New conversation") @db.VarChar(255)
+  messageCount Int    @default(0) @map("message_count")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages   Message[]
+
+  @@index([repositoryId])
+  @@index([userId])
+  @@map("chats")
+}
+
+/// A single turn.
+///
+/// Assistant turns persist their retrieval evidence (citations, related files,
+/// confidence) so a reloaded conversation renders exactly as it streamed.
+model Message {
+  id     String @id @default(uuid()) @db.VarChar(32)
+  chatId String @map("chat_id") @db.VarChar(32)
+
+  role         MessageRole
+  content      String
+  reasoning    String?
+  confidence   Float?
+  citations    Json        @default("[]")
+  relatedFiles Json        @default("[]") @map("related_files")
+  latencyMs    Int         @default(0) @map("latency_ms")
+  tokenCount   Int         @default(0) @map("token_count")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@index([chatId])
+  @@index([chatId, createdAt], map: "ix_messages_chat_created")
+  @@map("messages")
+}

@@ -1,0 +1,104 @@
+name: repomind
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: repomind-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: repomind
+      POSTGRES_PASSWORD: repomind
+      POSTGRES_DB: repomind
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U repomind -d repomind"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # On Linux this serves models to the backend directly.
+  #
+  # On macOS and Windows, Docker cannot reach the GPU, so generation is slow.
+  # Prefer running Ollama natively on the host instead: stop this service and
+  # point the backend at http://host.docker.internal:11434 (see OLLAMA_BASE_URL
+  # below).
+  ollama:
+    image: ollama/ollama:latest
+    container_name: repomind-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "ollama list || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Pulls the two required models once, then exits.
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: repomind-ollama-pull
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    entrypoint: ["/bin/sh", "-c"]
+    command: >
+      "ollama pull nomic-embed-text && ollama pull llama3.2:3b && echo 'models ready'"
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: repomind-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    environment:
+      ENVIRONMENT: production
+      DEBUG: "false"
+      DATABASE_URL: postgresql+asyncpg://repomind:repomind@postgres:5432/repomind
+      # Override with a real secret before exposing this to a network.
+      JWT_SECRET: ${JWT_SECRET:-docker-dev-secret-change-me}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_CHAT_MODEL: llama3.2:3b
+      OLLAMA_EMBED_MODEL: nomic-embed-text
+      CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8000:8000"
+    volumes:
+      # Clones and FAISS indexes must survive container restarts.
+      - repo-data:/app/data
+      - faiss-indexes:/app/faiss/indexes
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000/api/v1}
+    container_name: repomind-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  postgres-data:
+  ollama-models:
+  repo-data:
+  faiss-indexes:

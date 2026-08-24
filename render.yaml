@@ -1,0 +1,89 @@
+# Render blueprint for the RepoMind API.
+#
+# Deploy by pointing Render at this repository ("New +" -> "Blueprint"), or
+# create the service by hand using the same settings.
+#
+# Free-tier realities this file is written around:
+#   · The filesystem is wiped on every restart, redeploy and idle spin-down, so
+#     EPHEMERAL_FILESYSTEM keeps vectors and file text in Postgres instead.
+#   · 512 MB RAM, so embeddings use the small 384-dimension ONNX model.
+#   · No GPU, so generation goes to Groq rather than Ollama.
+#   · The service sleeps after 15 minutes idle and takes ~1 minute to wake.
+#
+# DATABASE_URL, JWT_SECRET, CHAT_API_KEY and CORS_ORIGINS are marked sync:false
+# and must be set in the Render dashboard.
+
+services:
+  - type: web
+    name: repomind-api
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: backend
+    healthCheckPath: /api/v1/health
+
+    # The model is downloaded during the build so the first request after a
+    # deploy is not stalled behind a 70-second download. Build output ships
+    # with the service; runtime writes to disk do not survive.
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+      python -c "
+      import os
+      from fastembed import TextEmbedding
+      model = os.environ.get('FASTEMBED_MODEL', 'BAAI/bge-small-en-v1.5')
+      cache = os.environ.get('MODEL_CACHE_DIR', '../data/models')
+      os.makedirs(cache, exist_ok=True)
+      TextEmbedding(model_name=model, cache_dir=cache)
+      print(f'Pre-downloaded {model}')
+      "
+
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.0"
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+
+      # ── Hosts with an ephemeral disk ──────────────────────────────────────
+      - key: EPHEMERAL_FILESYSTEM
+        value: "true"
+
+      # ── Generation: Groq, since no free host has a GPU ────────────────────
+      - key: CHAT_PROVIDER
+        value: groq
+      - key: CHAT_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: CHAT_MODEL
+        value: llama-3.1-8b-instant
+      - key: CHAT_API_KEY
+        sync: false
+
+      # ── Embeddings: in-process ONNX, sized for 512 MB ─────────────────────
+      - key: EMBEDDING_PROVIDER
+        value: fastembed
+      - key: FASTEMBED_MODEL
+        value: BAAI/bge-small-en-v1.5
+      - key: EMBEDDING_DIMENSION
+        value: "384"
+      - key: EMBEDDING_BATCH_SIZE
+        value: "16"
+      - key: MODEL_CACHE_DIR
+        value: ../data/models
+
+      # Indexing is memory-hungry; one job at a time on a small instance.
+      - key: MAX_CONCURRENT_INDEXING_JOBS
+        value: "1"
+
+      # ── Secrets: set these in the Render dashboard ────────────────────────
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false

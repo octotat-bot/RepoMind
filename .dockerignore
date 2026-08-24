@@ -1,0 +1,25 @@
+**/node_modules
+**/.next
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+
+# Never bake secrets or rebuildable runtime state into an image.
+**/.env
+**/.env.local
+data/
+faiss/indexes/*
+**/*.db
+**/*.sqlite3
+
+.git
+.gitignore
+**/.DS_Store
+docs/
+*.md
+!frontend/README.md
+database/generated/
