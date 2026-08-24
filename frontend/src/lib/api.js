@@ -158,9 +158,13 @@ async function send(url, init, { streaming = false } = {}) {
         if (caught?.name === "AbortError") throw caught;
 
         if (!retryable || attempt >= WAKE_RETRIES) {
+          // A CORS rejection and an unreachable server are indistinguishable
+          // here: the browser gives JavaScript the same opaque failure for
+          // both. Naming both beats guessing at one.
           throw new ApiError(
             `Could not reach the RepoMind API at ${BASE_URL}. ` +
-              "The server may be starting up — wait a moment and try again.",
+              "Either it is still starting up, or it is not allowing requests " +
+              "from this site — check CORS_ORIGINS on the API.",
             { code: "network_error" },
           );
         }
