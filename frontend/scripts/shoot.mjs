@@ -42,7 +42,12 @@ if (emailArg && passwordArg) {
   const email = `shot-${Date.now()}@repomind.dev`;
   await page.goto(`${APP}/register`, { waitUntil: "networkidle" });
   await fillAndSubmit(
-    { "#name": "Ada Lovelace", "#email": email, "#password": "verify-me-1234" },
+    {
+      "#name": "Ada Lovelace",
+      "#email": email,
+      "#password": "verify-me-1234",
+      "#confirm-password": "verify-me-1234",
+    },
     "Create account",
   );
   await page.waitForURL("**/dashboard", { timeout: 60_000 });

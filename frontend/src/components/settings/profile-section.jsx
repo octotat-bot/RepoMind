@@ -35,6 +35,7 @@ export function ProfileSection() {
 
   return (
     <SettingsSection
+      id="profile"
       title="Profile"
       description="How you appear inside RepoMind."
       footer={

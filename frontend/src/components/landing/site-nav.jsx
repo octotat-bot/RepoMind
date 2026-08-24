@@ -22,15 +22,22 @@ export function SiteNav() {
   }, []);
 
   return (
-    <header
-      className={cn(
-        "sticky top-0 z-50 border-b transition-colors duration-300",
-        lifted
-          ? "border-line bg-canvas/72 backdrop-blur-xl backdrop-saturate-150"
-          : "border-transparent bg-transparent",
-      )}
-    >
-      <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-6 px-5 sm:px-8">
+    // Floating pill rather than a full-width bar: the page has a lot of dark
+    // space, and a detached nav keeps the hero feeling open. `sticky` with a
+    // transparent wrapper means it floats without reserving layout height.
+    <header className="pointer-events-none sticky top-0 z-50 px-3 pt-3 sm:px-5 sm:pt-4">
+      <div
+        className={cn(
+          "pointer-events-auto mx-auto flex h-14 w-full max-w-5xl items-center gap-6",
+          "rounded-2xl px-3 pr-2 sm:px-5 sm:pr-3",
+          "transition-[background-color,border-color,box-shadow,backdrop-filter] duration-300",
+          lifted
+            ? // Glass only once scrolled; over the hero it would blur the
+              // gradient behind it and muddy the first impression.
+              "border border-white/10 bg-canvas/60 shadow-[0_8px_32px_-12px_rgba(0,0,0,0.9)] backdrop-blur-xl backdrop-saturate-150"
+            : "border border-transparent bg-transparent",
+        )}
+      >
         <Wordmark />
 
         <nav className="hidden flex-1 items-center gap-0.5 md:flex" aria-label="Page sections">
@@ -38,7 +45,7 @@ export function SiteNav() {
             <a
               key={href}
               href={href}
-              className="rounded-lg px-3 py-2 text-[13px] font-medium text-ink-subtle transition-colors hover:bg-surface-hover hover:text-ink"
+              className="rounded-lg px-3 py-2 text-[13px] font-medium text-ink-subtle transition-colors hover:bg-white/[0.06] hover:text-ink"
             >
               {label}
             </a>

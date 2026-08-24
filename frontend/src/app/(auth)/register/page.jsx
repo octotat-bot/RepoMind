@@ -18,7 +18,7 @@ export default function RegisterPage() {
   const register = useAuthStore((state) => state.register);
   useRedirectWhenAuthed();
 
-  const [form, setForm] = useState({ name: "", email: "", password: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
   const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -27,8 +27,14 @@ export default function RegisterPage() {
 
   const passwordTooShort =
     form.password.length > 0 && form.password.length < MIN_PASSWORD_LENGTH;
+  // Only complain once enough has been typed to judge; flagging a mismatch on
+  // the first keystroke is just noise.
+  const mismatch = form.confirm.length > 0 && form.password !== form.confirm;
   const canSubmit =
-    form.name.trim() && form.email.trim() && form.password.length >= MIN_PASSWORD_LENGTH;
+    form.name.trim() &&
+    form.email.trim() &&
+    form.password.length >= MIN_PASSWORD_LENGTH &&
+    form.password === form.confirm;
 
   const onSubmit = async (event) => {
     event.preventDefault();
@@ -105,6 +111,17 @@ export default function RegisterPage() {
           onChange={update("password")}
           error={passwordTooShort ? `Use at least ${MIN_PASSWORD_LENGTH} characters.` : undefined}
           hint={!form.password ? `At least ${MIN_PASSWORD_LENGTH} characters.` : undefined}
+        />
+
+        <PasswordField
+          id="confirm-password"
+          label="Confirm password"
+          required
+          autoComplete="new-password"
+          placeholder="Type it again"
+          value={form.confirm}
+          onChange={update("confirm")}
+          error={mismatch ? "Passwords do not match." : undefined}
         />
 
         <Button

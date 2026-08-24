@@ -4,9 +4,13 @@ import { motion } from "framer-motion";
 import { Card } from "@/components/ui/primitives";
 
 /** Titled card with an optional right-aligned action footer. */
-export function SettingsSection({ title, description, footer, delay = 0, children }) {
+export function SettingsSection({ id, title, description, footer, delay = 0, children }) {
   return (
     <motion.section
+      id={id}
+      // Anchored sections need breathing room, or the heading lands flush
+      // against the top of the viewport when deep-linked.
+      className="scroll-mt-6"
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4, delay, ease: [0.16, 1, 0.3, 1] }}

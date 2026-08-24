@@ -68,12 +68,14 @@ export function UserMenu() {
             transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
             className="absolute bottom-full left-0 z-50 mb-2 w-full min-w-[200px] overflow-hidden rounded-xl border border-line bg-surface-raised p-1 shadow-2xl"
           >
+            {/* Both live on the settings page, so Profile deep-links to that
+                section — otherwise the two entries are indistinguishable. */}
             <MenuItem
               icon={User}
               label="Profile"
               onClick={() => {
                 setOpen(false);
-                router.push("/settings");
+                router.push("/settings#profile");
               }}
             />
             <MenuItem

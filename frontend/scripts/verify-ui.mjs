@@ -97,7 +97,12 @@ async function main() {
   await shot(page, "02-register");
   await fillAndSubmit(
     page,
-    { "#name": "UI Bot", "#email": email, "#password": "verify-me-1234" },
+    {
+      "#name": "UI Bot",
+      "#email": email,
+      "#password": "verify-me-1234",
+      "#confirm-password": "verify-me-1234",
+    },
     "Create account",
   );
   await page.waitForURL("**/dashboard", { timeout: 60_000 });
