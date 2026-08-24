@@ -111,33 +111,45 @@ await submit.click();
 await page.waitForURL("**/dashboard", { timeout: 60_000 });
 check(page.url().includes("/dashboard"), "registration completed");
 
-console.log("\n[5] Profile and Settings go to different places");
-for (const route of ["/settings"]) {
+console.log("\n[5] Profile and Settings are different pages");
+// Warm both routes so the checks are not racing dev-mode compilation.
+for (const route of ["/profile", "/settings"]) {
   await page.goto(`${APP}${route}`, { waitUntil: "domcontentloaded" }).catch(() => {});
 }
-await page.goto(`${APP}/dashboard`, { waitUntil: "networkidle" });
-await page.waitForTimeout(1200);
 
-await page.getByRole("button", { name: /Confirm Test/ }).first().click();
-await page.waitForTimeout(400);
-await page.getByRole("menuitem", { name: "Profile" }).click();
-await page.waitForTimeout(1500);
-const profileUrl = page.url();
-check(profileUrl.endsWith("#profile"), `Profile deep-links to the section (${profileUrl.split("/").pop()})`);
+const openMenuItem = async (label) => {
+  await page.goto(`${APP}/dashboard`, { waitUntil: "networkidle" });
+  await page.waitForTimeout(1000);
+  await page.getByRole("button", { name: /Confirm Test/ }).first().click();
+  await page.waitForTimeout(350);
+  await page.getByRole("menuitem", { name: label }).click();
+  await page.waitForTimeout(1500);
+  return page.url();
+};
+
+const profileUrl = await openMenuItem("Profile");
+check(profileUrl.endsWith("/profile"), `Profile opens its own page (${profileUrl})`);
 check(
-  (await page.locator("#profile").count()) === 1,
-  "the profile section exists as an anchor target",
+  (await page.getByRole("heading", { name: "Profile", level: 1 }).count()) === 1,
+  "the profile page renders its own heading",
 );
+check(
+  (await page.getByText("Member since").count()) === 1,
+  "it shows account details Settings does not",
+);
+check(
+  (await page.getByText(/Repositories|Files indexed/).count()) > 0,
+  "it shows indexing activity",
+);
+await page.screenshot({ path: `${SHOTS}profile.png` });
 
-await page.goto(`${APP}/dashboard`, { waitUntil: "networkidle" });
-await page.waitForTimeout(1000);
-await page.getByRole("button", { name: /Confirm Test/ }).first().click();
-await page.waitForTimeout(400);
-await page.getByRole("menuitem", { name: "Settings" }).click();
-await page.waitForTimeout(1200);
-const settingsUrl = page.url();
-check(!settingsUrl.includes("#"), `Settings goes to the page top (${settingsUrl.split("/").pop()})`);
-check(settingsUrl !== profileUrl, "the two menu items no longer do the same thing");
+const settingsUrl = await openMenuItem("Settings");
+check(settingsUrl.endsWith("/settings"), `Settings opens the settings page (${settingsUrl})`);
+check(profileUrl !== settingsUrl, "the two menu items lead to different pages");
+check(
+  (await page.getByText("Existing sessions stay signed in").count()) === 1,
+  "settings shows the password form, which profile does not",
+);
 await page.screenshot({ path: `${SHOTS}settings.png` });
 
 await browser.close();
