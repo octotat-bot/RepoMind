@@ -47,6 +47,20 @@ async def readiness(session: SessionDep) -> dict[str, Any]:
         "dimension": settings.embedding_dimension,
     }
 
+    # A misconfigured CORS list is invisible from the server's side — the API
+    # looks healthy while every browser call is blocked — so the configured
+    # origins are reported here. They are not secret.
+    checks["cors"] = {
+        "ok": bool(settings.cors_origins or settings.cors_origin_regex),
+        "allowedOrigins": settings.cors_origins,
+        "allowedOriginRegex": settings.cors_origin_regex,
+    }
+    if not checks["cors"]["ok"]:
+        checks["cors"]["detail"] = (
+            "No origins allowed. Set CORS_ORIGINS to the frontend origin exactly, "
+            "with no trailing slash."
+        )
+
     # Kept for backwards compatibility: the settings page and older clients
     # read `checks.ollama`. It mirrors whichever backend is actually serving.
     checks["ollama"] = {

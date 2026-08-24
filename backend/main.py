@@ -74,11 +74,18 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=settings.cors_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["Content-Disposition"],
 )
+
+if not settings.cors_origins and not settings.cors_origin_regex:
+    logger.warning(
+        "CORS_ORIGINS is empty — every browser request will be blocked. "
+        "Set it to the exact frontend origin, e.g. https://your-app.vercel.app"
+    )
 
 register_exception_handlers(app)
 app.include_router(api_router, prefix=settings.api_prefix)

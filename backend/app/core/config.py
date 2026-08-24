@@ -103,11 +103,22 @@ class Settings(BaseSettings):
         ]
     )
 
+    # Vercel mints a new hostname for every deployment, so a fixed list goes
+    # stale on each push. A pattern such as
+    #   https://.*\.vercel\.app
+    # keeps preview builds working alongside the production domain.
+    cors_origin_regex: str | None = None
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
         if isinstance(value, str):
-            return [origin.strip() for origin in value.split(",") if origin.strip()]
+            # A trailing slash never matches: browsers send the bare origin.
+            return [
+                origin.strip().rstrip("/")
+                for origin in value.split(",")
+                if origin.strip()
+            ]
         return value
 
     @field_validator("database_url", mode="after")

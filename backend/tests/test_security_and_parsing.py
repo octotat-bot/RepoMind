@@ -184,3 +184,22 @@ def test_sqlite_url_gets_the_async_driver() -> None:
     assert Settings(database_url="sqlite:///./local.db").database_url == (
         "sqlite+aiosqlite:///./local.db"
     )
+
+
+# ── CORS origin parsing ──────────────────────────────────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("given", "expected"),
+    [
+        ("https://a.vercel.app", ["https://a.vercel.app"]),
+        # A trailing slash never matches: browsers send the bare origin.
+        ("https://a.vercel.app/", ["https://a.vercel.app"]),
+        ("https://a.app, https://b.app", ["https://a.app", "https://b.app"]),
+        ("  https://a.app  ,  ", ["https://a.app"]),
+        # An empty value must not silently allow nothing while looking healthy.
+        ("", []),
+    ],
+)
+def test_cors_origins_are_parsed_from_a_plain_list(given: str, expected: list[str]) -> None:
+    assert Settings(cors_origins=given).cors_origins == expected
