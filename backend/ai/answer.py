@@ -13,7 +13,11 @@ from dataclasses import dataclass, field
 from ai.retrieval import RetrievedChunk
 
 # Matches [1], [2][3] and [1, 2] — the citation forms small models emit.
-_CITATION_PATTERN = re.compile(r"\[(\d+(?:\s*,\s*\d+)*)\]")
+#
+# Fullwidth brackets are included because some models answer with 【1】 instead,
+# and a citation the parser cannot see is a citation the user never gets: the
+# answer still reads correctly while the sources silently disappear.
+_CITATION_PATTERN = re.compile(r"[\[【](\d+(?:\s*,\s*\d+)*)[\]】]")
 
 _MAX_RELATED_FILES = 6
 

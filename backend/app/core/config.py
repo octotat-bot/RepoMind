@@ -52,7 +52,9 @@ class Settings(BaseSettings):
     # free host provides a GPU: groq | openai | openrouter | together | custom
     chat_provider: str = "ollama"
     chat_base_url: str = "https://api.groq.com/openai/v1"
-    chat_model: str = "llama-3.1-8b-instant"
+    # Groq's catalogue changes: it has already retired the Llama models this
+    # once defaulted to. Check /models against your key if generation 404s.
+    chat_model: str = "openai/gpt-oss-20b"
     chat_api_key: str | None = None
 
     # ── Ollama ──────────────────────────────────────────────────────────────

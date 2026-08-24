@@ -20,7 +20,7 @@ code is identical, only the configuration differs.
 
 | Concern | Local | Deployed | Why |
 | --- | --- | --- | --- |
-| Generation | Ollama, `llama3.2:3b` | Groq, `llama-3.1-8b-instant` | No free host has a GPU |
+| Generation | Ollama, `llama3.2:3b` | Groq, `openai/gpt-oss-20b` | No free host has a GPU |
 | Embeddings | Ollama, `nomic-embed-text` | fastembed ONNX, in-process | Same reason, but small enough to run on CPU |
 | Database | SQLite file | Neon Postgres | Free hosts wipe the disk |
 | FAISS index | Files on disk | Rebuilt from Postgres on demand | Same reason |
@@ -98,9 +98,23 @@ OpenAI-compatible.
 2. Go to **API Keys** → **Create API Key**.
 3. Copy it — it starts with `gsk_` and is shown only once.
 
-The default model is `llama-3.1-8b-instant`, which has the most generous free
-limits (30 requests/minute, 14,400/day). That is far more than a portfolio demo
-will ever use.
+The default model is `openai/gpt-oss-20b`: it is fast (under a second for a
+typical answer), formats citations in the `[1]` style the answer parser expects,
+and its free limits are far beyond what a portfolio demo will use.
+
+> **Groq retires models.** This project originally defaulted to
+> `llama-3.1-8b-instant`, which no longer exists. If generation fails with a
+> model error, list what your key can actually reach and update `CHAT_MODEL`:
+>
+> ```bash
+> curl -s https://api.groq.com/openai/v1/models \
+>   -H "Authorization: Bearer $CHAT_API_KEY" | python3 -m json.tool
+> ```
+>
+> Two things to check before switching: models that emit `<think>` blocks
+> (some Qwen builds) leak reasoning into the answer, and models that cite with
+> fullwidth `【1】` brackets used to lose their citations entirely — the parser
+> now accepts both, but it is worth confirming citations still appear.
 
 ---
 
@@ -139,7 +153,7 @@ pip install -r requirements.txt && python -c "from fastembed import TextEmbeddin
 | `EPHEMERAL_FILESYSTEM` | `true` |
 | `CHAT_PROVIDER` | `groq` |
 | `CHAT_BASE_URL` | `https://api.groq.com/openai/v1` |
-| `CHAT_MODEL` | `llama-3.1-8b-instant` |
+| `CHAT_MODEL` | `openai/gpt-oss-20b` |
 | `CHAT_API_KEY` | your `gsk_...` key from Step 2 |
 | `EMBEDDING_PROVIDER` | `fastembed` |
 | `FASTEMBED_MODEL` | `BAAI/bge-small-en-v1.5` |

@@ -136,3 +136,25 @@ def test_reasoning_describes_the_retrieval() -> None:
     analysis = analyse("From [1].", [make_chunk(1, "auth.py", 0.9)])
     assert "auth.py" in analysis.reasoning
     assert "retrieved" in analysis.reasoning.lower()
+
+
+# ── Citation parsing across model quirks ─────────────────────────────────────
+
+
+def test_citation_forms_models_actually_emit() -> None:
+    """Different hosted models bracket citations differently."""
+    from ai.answer import extract_cited_numbers
+
+    assert extract_cited_numbers("As shown in [1] and [3].") == {1, 3}
+    assert extract_cited_numbers("See [1, 2].") == {1, 2}
+    assert extract_cited_numbers("Both [2][4] agree.") == {2, 4}
+    # gpt-oss-120b answers with fullwidth brackets.
+    assert extract_cited_numbers("According to 【1】 the session prepares it.") == {1}
+    assert extract_cited_numbers("Mixed 【2】 and [5].") == {2, 5}
+
+
+def test_prose_is_not_mistaken_for_a_citation() -> None:
+    from ai.answer import extract_cited_numbers
+
+    assert extract_cited_numbers("No sources here.") == set()
+    assert extract_cited_numbers("An array like arr[i] is not a citation.") == set()
