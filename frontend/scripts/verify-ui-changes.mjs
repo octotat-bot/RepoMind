@@ -21,7 +21,16 @@ console.log("\n[1] landing nav floats and is transparent over the hero");
 await page.goto(APP, { waitUntil: "networkidle" });
 await page.waitForTimeout(1200);
 
+/** Alpha of a computed colour, however the browser chose to serialise it. */
+const alphaOf = (colour) => {
+  const match = colour.match(/[\d.]+\s*\)$/);
+  if (colour.includes("/")) return parseFloat(colour.split("/").pop());
+  if (colour.startsWith("rgba")) return parseFloat(match?.[0] ?? "1");
+  return colour === "rgba(0, 0, 0, 0)" ? 0 : 1;
+};
+
 const navBar = page.locator("header > div").first();
+const viewport = page.viewportSize();
 const atTop = await navBar.evaluate((el) => {
   const style = getComputedStyle(el);
   const rect = el.getBoundingClientRect();
@@ -30,12 +39,28 @@ const atTop = await navBar.evaluate((el) => {
     backdrop: style.backdropFilter,
     radius: style.borderRadius,
     left: Math.round(rect.left),
+    right: Math.round(rect.right),
     width: Math.round(rect.width),
+    height: Math.round(rect.height),
   };
 });
-check(atTop.background === "rgba(0, 0, 0, 0)", `transparent over hero (${atTop.background})`);
-check(parseFloat(atTop.radius) > 0, `rounded pill (radius ${atTop.radius})`);
-check(atTop.left > 0, `detached from the edge (${atTop.left}px inset)`);
+
+const topAlpha = alphaOf(atTop.background);
+check(topAlpha < 0.1, `barely tinted over the hero (alpha ${topAlpha})`);
+// rounded-full serialises as an enormous pixel value, so compare to the height.
+check(
+  parseFloat(atTop.radius) >= atTop.height / 2,
+  `fully rounded pill (radius ${parseFloat(atTop.radius).toFixed(0)}px vs height ${atTop.height}px)`,
+);
+check(
+  atTop.width < viewport.width * 0.7,
+  `hugs its content rather than spanning the page (${atTop.width} of ${viewport.width}px)`,
+);
+check(
+  Math.abs(atTop.left - (viewport.width - atTop.right)) <= 2,
+  "centred horizontally",
+);
+check(atTop.backdrop.includes("blur"), `blurs what is behind it (${atTop.backdrop})`);
 await page.screenshot({ path: `${SHOTS}nav-top.png`, clip: { x: 0, y: 0, width: 1512, height: 200 } });
 
 console.log("\n[2] nav becomes glass once scrolled");
@@ -45,7 +70,9 @@ const scrolled = await navBar.evaluate((el) => {
   const style = getComputedStyle(el);
   return { background: style.backgroundColor, backdrop: style.backdropFilter };
 });
-check(scrolled.background !== "rgba(0, 0, 0, 0)", `tinted after scroll (${scrolled.background})`);
+const scrolledAlpha = alphaOf(scrolled.background);
+check(scrolledAlpha > topAlpha, `gains presence once scrolled (${topAlpha} → ${scrolledAlpha})`);
+check(scrolledAlpha < 0.2, `still reads as glass, not a solid bar (alpha ${scrolledAlpha})`);
 check(scrolled.backdrop.includes("blur"), `blurs content behind (${scrolled.backdrop})`);
 const stillVisible = await navBar.evaluate((el) => el.getBoundingClientRect().top);
 check(stillVisible >= 0 && stillVisible < 60, `stays pinned near the top (${stillVisible}px)`);
