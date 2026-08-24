@@ -76,6 +76,12 @@ class FastEmbedEmbedder(Embedder):
                     TextEmbedding,
                     model_name=self.model_name,
                     cache_dir=str(settings.model_cache_dir),
+                    # ONNX allocates working buffers per thread. On a 512 MB
+                    # instance the default thread count pushes peak memory
+                    # ~110 MB higher and the process is killed mid-index, so
+                    # small hosts are pinned to one thread. Measured on
+                    # bge-small over 446 chunks: 458 MB → 348 MB.
+                    threads=settings.embedding_threads or None,
                 )
             except Exception as exc:  # noqa: BLE001 - surfaced to the caller
                 raise UpstreamError(

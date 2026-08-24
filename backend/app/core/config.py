@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     fastembed_model: str = "nomic-ai/nomic-embed-text-v1.5-Q"
     embedding_dimension: int = 768
     embedding_batch_size: int = 32
+    # ONNX working memory scales with both batch size and thread count. Set to
+    # 1 on a memory-capped host; 0 leaves the library to choose.
+    embedding_threads: int = 0
 
     # ── Storage ─────────────────────────────────────────────────────────────
     data_dir: Path = PROJECT_ROOT / "data"

@@ -13,12 +13,24 @@ from __future__ import annotations
 
 import json
 import os
+import ssl
 import sys
 import time
 import urllib.error
 import urllib.request
 
 BASE = os.environ.get("REPOMIND_API", "http://127.0.0.1:8000/api/v1").rstrip("/")
+
+# A python.org build on macOS ships without the system trust store, so every
+# HTTPS call fails with CERTIFICATE_VERIFY_FAILED — which looks like a broken
+# deployment rather than a broken local install. certifi is already a transitive
+# dependency, so use its bundle.
+try:
+    import certifi
+
+    SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except ImportError:  # pragma: no cover - certifi ships with httpx
+    SSL_CONTEXT = None
 SAMPLE_REPO = os.environ.get("REPOMIND_SAMPLE_REPO", "https://github.com/psf/requests")
 
 failures: list[str] = []
@@ -45,7 +57,7 @@ def call(path: str, method: str = "GET", body=None, token: str | None = None, ra
         data = json.dumps(body).encode()
         request.add_header("Content-Type", "application/json")
     try:
-        with urllib.request.urlopen(request, data, timeout=180) as response:
+        with urllib.request.urlopen(request, data, timeout=180, context=SSL_CONTEXT) as response:
             payload = response.read().decode()
             return response.status, (payload if raw else json.loads(payload or "null"))
     except urllib.error.HTTPError as error:
@@ -64,7 +76,9 @@ def stream(path: str, body: dict, token: str) -> list[tuple[str, dict]]:
     request.add_header("Accept", "text/event-stream")
 
     events: list[tuple[str, dict]] = []
-    with urllib.request.urlopen(request, json.dumps(body).encode(), timeout=300) as response:
+    with urllib.request.urlopen(
+        request, json.dumps(body).encode(), timeout=300, context=SSL_CONTEXT
+    ) as response:
         buffer = ""
         while True:
             piece = response.read1(1024).decode("utf-8", errors="replace")

@@ -158,7 +158,8 @@ pip install -r requirements.txt && python -c "from fastembed import TextEmbeddin
 | `EMBEDDING_PROVIDER` | `fastembed` |
 | `FASTEMBED_MODEL` | `BAAI/bge-small-en-v1.5` |
 | `EMBEDDING_DIMENSION` | `384` |
-| `EMBEDDING_BATCH_SIZE` | `16` |
+| `EMBEDDING_BATCH_SIZE` | `4` |
+| `EMBEDDING_THREADS` | `1` |
 | `MODEL_CACHE_DIR` | `../data/models` |
 | `MAX_CONCURRENT_INDEXING_JOBS` | `1` |
 | `CORS_ORIGINS` | `http://localhost:3000` for now — corrected in Step 5 |
@@ -295,10 +296,20 @@ Confirm it ends in `/api/v1`, and remember it needs a Vercel redeploy to change.
 **Build fails on `faiss-cpu` or `onnxruntime`**
 Almost always a Python version mismatch. Set `PYTHON_VERSION` to `3.13.0`.
 
-**Indexing dies partway with no error**
-The instance ran out of memory. Use a smaller repository, keep
-`MAX_CONCURRENT_INDEXING_JOBS=1`, and make sure `EMBEDDING_DIMENSION` is `384`
-with the small model rather than `768`.
+**Indexing dies partway, then the API returns 502**
+The instance ran out of memory and was killed. Peak usage measured on the
+free tier while indexing a 446-chunk repository:
+
+| Configuration | Peak | Fits in 512 MB? |
+| --- | --- | --- |
+| batch 16, default ONNX threads | 458 MB | no — killed mid-index |
+| batch 4, `EMBEDDING_THREADS=1` | 348 MB | yes |
+
+The floor is about 320 MB, most of it the ONNX runtime and the model itself, so
+there is not much more to reclaim. Check `EMBEDDING_BATCH_SIZE=4`,
+`EMBEDDING_THREADS=1`, `EMBEDDING_DIMENSION=384` with the small model, and
+`MAX_CONCURRENT_INDEXING_JOBS=1`. If a repository still fails, it is too large
+for the free tier — a paid instance with 2 GB removes the constraint entirely.
 
 **A repository worked, then stopped after a while**
 It was indexed before `EPHEMERAL_FILESYSTEM=true` was set, so its vectors were

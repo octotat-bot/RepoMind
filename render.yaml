@@ -69,8 +69,13 @@ services:
         value: BAAI/bge-small-en-v1.5
       - key: EMBEDDING_DIMENSION
         value: "384"
+      # Measured on a 512 MB instance: batch 16 with default ONNX threads
+      # peaks at 458 MB and gets the process killed mid-index. Batch 4 on a
+      # single thread peaks at 348 MB.
       - key: EMBEDDING_BATCH_SIZE
-        value: "16"
+        value: "4"
+      - key: EMBEDDING_THREADS
+        value: "1"
       - key: MODEL_CACHE_DIR
         value: ../data/models
 

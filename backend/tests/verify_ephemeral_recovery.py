@@ -24,11 +24,21 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import ssl
 import sys
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
+
+# A python.org build on macOS ships without the system trust store, so HTTPS
+# calls fail with CERTIFICATE_VERIFY_FAILED against a deployed instance.
+try:
+    import certifi
+
+    SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
+except ImportError:  # pragma: no cover - certifi ships with httpx
+    SSL_CONTEXT = None
 
 BASE = os.environ.get("REPOMIND_API", "http://127.0.0.1:8000/api/v1").rstrip("/")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -58,7 +68,7 @@ def call(path: str, method: str = "GET", body=None, token: str | None = None, ra
         data = json.dumps(body).encode()
         request.add_header("Content-Type", "application/json")
     try:
-        with urllib.request.urlopen(request, data, timeout=300) as response:
+        with urllib.request.urlopen(request, data, timeout=300, context=SSL_CONTEXT) as response:
             payload = response.read().decode()
             return response.status, (payload if raw else json.loads(payload or "null"))
     except urllib.error.HTTPError as error:
@@ -75,7 +85,7 @@ def stream_chat(repo_id: str, message: str, token: str) -> list[tuple[str, dict]
     request.add_header("Content-Type", "application/json")
     events: list[tuple[str, dict]] = []
     with urllib.request.urlopen(
-        request, json.dumps({"message": message}).encode(), timeout=300
+        request, json.dumps({"message": message}).encode(), timeout=300, context=SSL_CONTEXT
     ) as response:
         buffer = ""
         while True:
