@@ -3,6 +3,11 @@
 # Build context is the PROJECT ROOT, not backend/, because the service also
 # needs shared/constants.json:
 #     docker build -f backend/Dockerfile .
+#
+# On Render, that means Root Directory must be left blank (the repository root)
+# and Dockerfile Path set to `backend/Dockerfile`. Pointing Root Directory at
+# backend/ instead makes the `COPY shared/` below fail, because shared/ is then
+# outside the build context.
 
 # ── Builder ───────────────────────────────────────────────────────────────────
 # Wheels are built in a throwaway stage so the runtime image carries neither
@@ -43,15 +48,27 @@ COPY --chown=repomind:repomind backend/ /app/backend/
 COPY --chown=repomind:repomind shared/ /app/shared/
 
 # Writable mount points for clones and FAISS indexes.
-RUN mkdir -p /app/data/repos /app/faiss/indexes \
+RUN mkdir -p /app/data/repos /app/faiss/indexes /app/data/models \
     && chown -R repomind:repomind /app
 
 USER repomind
 WORKDIR /app/backend
 
+# Bake the embedding model into the image when one is configured. Downloading
+# it lazily costs ~70 seconds on the first request after every deploy, and on a
+# host with an ephemeral disk that cost is paid again after each restart.
+ARG FASTEMBED_MODEL=""
+RUN if [ -n "$FASTEMBED_MODEL" ]; then \
+      python -c "from fastembed import TextEmbedding; \
+TextEmbedding(model_name='$FASTEMBED_MODEL', cache_dir='/app/data/models')"; \
+    fi
+
+ENV PORT=8000
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD curl -fsS http://localhost:8000/api/v1/health || exit 1
+    CMD curl -fsS "http://localhost:${PORT}/api/v1/health" || exit 1
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Shell form so ${PORT} is expanded: hosts such as Render assign the port at
+# runtime and expect the process to bind whatever they hand it.
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT}
